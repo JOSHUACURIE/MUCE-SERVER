@@ -1,6 +1,7 @@
 // controllers/user.controller.js
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const { handleAsync, sendResponse, sendError } = require('./base.controller');
 
 // Generate JWT Token
@@ -48,11 +49,35 @@ const registerUser = handleAsync(async (req, res) => {
 const loginUser = handleAsync(async (req, res) => {
   const { email, password } = req.body;
 
+  console.log(`Login attempt for email: ${email}`);
+
+  // Validate input
+  if (!email || !password) {
+    return sendError(res, 400, 'Please provide email and password');
+  }
+
   // Check for user
   const user = await User.findOne({ email }).select('+password');
   
-  if (!user || !(await user.comparePassword(password))) {
+  if (!user) {
+    console.log(`User not found: ${email}`);
     return sendError(res, 401, 'Invalid email or password');
+  }
+
+  console.log(`User found: ${user.email}, checking password...`);
+
+  // Check password
+  const isPasswordMatch = await user.comparePassword(password);
+  
+  if (!isPasswordMatch) {
+    console.log(`Password mismatch for: ${email}`);
+    return sendError(res, 401, 'Invalid email or password');
+  }
+
+  // Check if user is active
+  if (!user.isActive) {
+    console.log(`Inactive account: ${email}`);
+    return sendError(res, 401, 'Account is deactivated. Please contact administrator.');
   }
 
   // Update last login
@@ -62,6 +87,9 @@ const loginUser = handleAsync(async (req, res) => {
   // Generate token
   const token = generateToken(user._id);
 
+  console.log(`Login successful for: ${email}`);
+
+  // Send response
   sendResponse(res, 200, {
     _id: user._id,
     name: user.name,
@@ -69,6 +97,48 @@ const loginUser = handleAsync(async (req, res) => {
     role: user.role,
     token
   }, 'Login successful');
+});
+
+// @desc    Get current user profile
+// @route   GET /api/users/profile
+// @access  Private
+const getProfile = handleAsync(async (req, res) => {
+  const user = await User.findById(req.user._id).select('-password');
+  
+  if (!user) {
+    return sendError(res, 404, 'User not found');
+  }
+
+  sendResponse(res, 200, user);
+});
+
+// @desc    Update user profile
+// @route   PUT /api/users/profile
+// @access  Private
+const updateProfile = handleAsync(async (req, res) => {
+  const user = await User.findById(req.user._id);
+  
+  if (!user) {
+    return sendError(res, 404, 'User not found');
+  }
+
+  const { name, email, password } = req.body;
+
+  user.name = name || user.name;
+  user.email = email || user.email;
+  
+  if (password) {
+    user.password = password;
+  }
+
+  const updatedUser = await user.save();
+
+  sendResponse(res, 200, {
+    _id: updatedUser._id,
+    name: updatedUser.name,
+    email: updatedUser.email,
+    role: updatedUser.role
+  }, 'Profile updated successfully');
 });
 
 // @desc    Get all users
@@ -150,41 +220,22 @@ const deleteUser = handleAsync(async (req, res) => {
   sendResponse(res, 200, null, 'User deleted successfully');
 });
 
-// @desc    Update profile
-// @route   PUT /api/users/profile
+// @desc    Logout user
+// @route   POST /api/users/logout
 // @access  Private
-const updateProfile = handleAsync(async (req, res) => {
-  const user = await User.findById(req.user._id);
-  
-  if (!user) {
-    return sendError(res, 404, 'User not found');
-  }
-
-  const { name, email, password } = req.body;
-
-  user.name = name || user.name;
-  user.email = email || user.email;
-  
-  if (password) {
-    user.password = password;
-  }
-
-  const updatedUser = await user.save();
-
-  sendResponse(res, 200, {
-    _id: updatedUser._id,
-    name: updatedUser.name,
-    email: updatedUser.email,
-    role: updatedUser.role
-  }, 'Profile updated successfully');
+const logoutUser = handleAsync(async (req, res) => {
+  // Since we're using JWT, we just need to inform the client to clear the token
+  sendResponse(res, 200, null, 'Logged out successfully');
 });
 
 module.exports = {
   registerUser,
   loginUser,
+  getProfile,
+  updateProfile,
   getUsers,
   getUserById,
   updateUser,
   deleteUser,
-  updateProfile
+  logoutUser
 };

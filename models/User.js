@@ -1,4 +1,4 @@
-
+// models/User.js
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
@@ -17,7 +17,8 @@ const userSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: true
+    required: true,
+    select: false // Don't return password by default
   },
   role: {
     type: String,
@@ -25,8 +26,8 @@ const userSchema = new mongoose.Schema({
     default: 'editor'
   },
   profileImage: {
-    type: String,
-    default: null
+    url: String,
+    publicId: String
   },
   lastLogin: {
     type: Date,
@@ -40,16 +41,27 @@ const userSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Hash password before saving
+// Hash password ONLY if it's modified
 userSchema.pre('save', async function(next) {
+  // Only hash if password is modified (or new)
   if (!this.isModified('password')) return next();
-  this.password = await bcrypt.hash(this.password, 10);
-  next();
+  
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (error) {
+    next(error);
+  }
 });
 
 // Compare password method
 userSchema.methods.comparePassword = async function(candidatePassword) {
-  return await bcrypt.compare(candidatePassword, this.password);
+  try {
+    return await bcrypt.compare(candidatePassword, this.password);
+  } catch (error) {
+    throw new Error(error);
+  }
 };
 
 module.exports = mongoose.model('User', userSchema);

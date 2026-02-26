@@ -11,12 +11,18 @@ const {
   uploadGallery
 } = require('../controllers/event.controller');
 const { protect, authorize } = require('../middleware/auth');
-const { upload } = require('../middleware/upload');
+const { uploadToCloudinary, handleUploadError } = require('../middleware/upload');
 
 // Public routes
 router.route('/')
   .get(getEvents)
-  .post(protect, authorize('admin', 'editor'), createEvent);
+  .post(
+    protect, 
+    authorize('admin', 'editor'), 
+    uploadToCloudinary('images').single('coverImage'),
+    handleUploadError,
+    createEvent
+  );
 
 router.get('/featured', (req, res, next) => {
   req.query.featured = 'true';
@@ -32,17 +38,24 @@ router.get('/upcoming', (req, res, next) => {
 
 router.route('/:id')
   .get(getEventById)
-  .put(protect, authorize('admin', 'editor'), updateEvent)
+  .put(
+    protect, 
+    authorize('admin', 'editor'), 
+    uploadToCloudinary('images').single('coverImage'),
+    handleUploadError,
+    updateEvent
+  )
   .delete(protect, authorize('admin'), deleteEvent);
 
 // Event registration
 router.post('/:id/register', registerForEvent);
 
-// Gallery upload
+// Gallery upload - multiple images
 router.post('/:id/gallery', 
   protect, 
   authorize('admin', 'editor'),
-  upload.array('images', 20), 
+  uploadToCloudinary('gallery').array('images', 20),
+  handleUploadError,
   uploadGallery
 );
 
@@ -50,6 +63,18 @@ router.post('/:id/gallery',
 router.get('/range/:start/:end', async (req, res, next) => {
   req.query.startDate = req.params.start;
   req.query.endDate = req.params.end;
+  next();
+}, getEvents);
+
+// Get events by type
+router.get('/type/:type', (req, res, next) => {
+  req.query.type = req.params.type;
+  next();
+}, getEvents);
+
+// Get events by status
+router.get('/status/:status', (req, res, next) => {
+  req.query.status = req.params.status;
   next();
 }, getEvents);
 

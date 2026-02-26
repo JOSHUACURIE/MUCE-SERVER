@@ -4,11 +4,13 @@ const router = express.Router();
 const {
   registerUser,
   loginUser,
+  getProfile,
+  updateProfile,
   getUsers,
   getUserById,
   updateUser,
   deleteUser,
-  updateProfile
+  logoutUser
 } = require('../controllers/user.controller');
 const { protect, authorize } = require('../middleware/auth');
 const { upload } = require('../middleware/upload');
@@ -18,14 +20,11 @@ router.post('/register', registerUser);
 router.post('/login', loginUser);
 
 // Protected routes
-router.get('/profile', protect, (req, res) => {
-  res.json({
-    success: true,
-    data: req.user
-  });
-});
+router.route('/profile')
+  .get(protect, getProfile)
+  .put(protect, upload.single('profileImage'), updateProfile);
 
-router.put('/profile', protect, upload.single('profileImage'), updateProfile);
+router.post('/logout', protect, logoutUser);
 
 // Admin only routes
 router.route('/')
